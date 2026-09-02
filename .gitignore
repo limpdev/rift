@@ -2,6 +2,25 @@
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
+.DS_Store
+Icon?
+desktop.ini
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.vscode
+.claude
+.hermes
+.cursor
+.cursorignore
+.cursorrules
+.cursorignore
+
+docs/
+
 ## User settings
 xcuserdata/
 
