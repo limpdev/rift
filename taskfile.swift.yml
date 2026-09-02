@@ -1,0 +1,326 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+vars:
+  TYPES:
+    "*.swift"
+    # Change these once for your project.
+  PROJECT: Rift.xcodeproj
+  SCHEME: Rift
+
+  # macOS:
+  DESTINATION: platform=macOS
+
+  # iOS simulator example:
+  # DESTINATION: platform=iOS Simulator,name=iPhone 16 Pro
+
+  CONFIG_DEBUG: Debug
+  CONFIG_RELEASE: Release
+
+  DERIVED_DATA: "{{.ROOT_DIR}}/.derivedData"
+  BUILD_DIR: "{{.ROOT_DIR}}/.build"
+  ARCHIVE_PATH: "{{.BUILD_DIR}}/{{.SCHEME}}.xcarchive"
+  EXPORT_PATH: "{{.BUILD_DIR}}/export"
+
+tasks:
+  sum:
+    desc: summarizes Swift files
+    cmds:
+      - code2prompt --output-format "xml" --output-file "Swift.xml" --include {{.TYPES}}
+    silent: true
+
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+      
+  build:
+    desc: Build Debug
+    cmds:
+      - task: build:debug
+
+  build:debug:
+    desc: Build Debug configuration
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -configuration "{{.CONFIG_DEBUG}}" \
+          -destination "{{.DESTINATION}}" \
+          -derivedDataPath "{{.DERIVED_DATA}}" \
+          build
+
+  build:release:
+    desc: Build Release configuration
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -configuration "{{.CONFIG_RELEASE}}" \
+          -destination "{{.DESTINATION}}" \
+          -derivedDataPath "{{.DERIVED_DATA}}" \
+          build
+
+  rebuild:
+    desc: Clean and rebuild Debug
+    cmds:
+      - task: clean
+      - task: build
+
+  run:
+    desc: Build and launch the macOS application
+    deps:
+      - build:debug
+    cmds:
+      - |
+        APP_PATH="$(find "{{.DERIVED_DATA}}/Build/Products/Debug" \
+          -maxdepth 1 \
+          -name "*.app" \
+          -type d \
+          | head -n 1)"
+
+        if [ -z "$APP_PATH" ]; then
+          echo "Could not locate built application"
+          exit 1
+        fi
+
+        echo "Launching: $APP_PATH"
+        open "$APP_PATH"
+
+  open:
+    desc: Open project in Xcode
+    cmds:
+      - open "{{.PROJECT}}"
+
+  # ---------------------------------------------------------------------------
+  # Testing
+  # ---------------------------------------------------------------------------
+
+  test:
+    desc: Run all tests
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -destination "{{.DESTINATION}}" \
+          -derivedDataPath "{{.DERIVED_DATA}}" \
+          test
+
+  test:build:
+    desc: Build tests without executing them
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -destination "{{.DESTINATION}}" \
+          -derivedDataPath "{{.DERIVED_DATA}}" \
+          build-for-testing
+
+  test:only:
+    desc: Run a specific test target or test
+    requires:
+      vars:
+        - TEST
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -destination "{{.DESTINATION}}" \
+          -derivedDataPath "{{.DERIVED_DATA}}" \
+          -only-testing:"{{.TEST}}" \
+          test
+
+  # Example:
+  #
+  # task test:only TEST="MyAppTests/MyAppTests/testExample"
+
+  # ---------------------------------------------------------------------------
+  # Cleaning
+  # ---------------------------------------------------------------------------
+
+  clean:
+    desc: Clean Xcode build products
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          clean
+
+  clean:derived:
+    desc: Delete this project's Task-managed DerivedData
+    cmds:
+      - rm -rf "{{.DERIVED_DATA}}"
+
+  clean:all:
+    desc: Remove all local build artifacts
+    cmds:
+      - rm -rf "{{.DERIVED_DATA}}"
+      - rm -rf "{{.BUILD_DIR}}"
+
+  clean:xcode:
+    desc: Delete all Xcode DerivedData
+    prompt: This deletes DerivedData for ALL Xcode projects. Continue?
+    cmds:
+      - rm -rf ~/Library/Developer/Xcode/DerivedData/*
+
+  # ---------------------------------------------------------------------------
+  # Swift Package Manager
+  # ---------------------------------------------------------------------------
+
+  package:resolve:
+    desc: Resolve Swift package dependencies
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -resolvePackageDependencies
+
+  package:reset:
+    desc: Reset Swift package caches
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -clonedSourcePackagesDirPath "{{.ROOT_DIR}}/.packages" \
+          -resolvePackageDependencies
+
+  # ---------------------------------------------------------------------------
+  # Archive And Distribution
+  # ---------------------------------------------------------------------------
+
+  archive:
+    desc: Create a Release archive
+    cmds:
+      - mkdir -p "{{.BUILD_DIR}}"
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -configuration "{{.CONFIG_RELEASE}}" \
+          -archivePath "{{.ARCHIVE_PATH}}" \
+          archive
+
+  export:
+    desc: Export an archive using ExportOptions.plist
+    requires:
+      vars:
+        - EXPORT_OPTIONS
+    cmds:
+      - mkdir -p "{{.EXPORT_PATH}}"
+      - |
+        xcodebuild \
+          -exportArchive \
+          -archivePath "{{.ARCHIVE_PATH}}" \
+          -exportPath "{{.EXPORT_PATH}}" \
+          -exportOptionsPlist "{{.EXPORT_OPTIONS}}"
+
+  release:
+    desc: Archive and export a release
+    deps:
+      - archive
+    cmds:
+      - task: export
+
+  # Example:
+  #
+  # task export EXPORT_OPTIONS=ExportOptions.plist
+
+  # ---------------------------------------------------------------------------
+  # Inspection
+  # ---------------------------------------------------------------------------
+
+  info:
+    desc: Show Xcode project build settings
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -showBuildSettings
+
+  schemes:
+    desc: Show available schemes and targets
+    cmds:
+      - xcodebuild -project "{{.PROJECT}}" -list
+
+  destinations:
+    desc: Show available build destinations
+    cmds:
+      - |
+        xcodebuild \
+          -project "{{.PROJECT}}" \
+          -scheme "{{.SCHEME}}" \
+          -showdestinations
+
+  version:
+    desc: Show Swift and Xcode versions
+    cmds:
+      - swift --version
+      - xcodebuild -version
+
+  # ---------------------------------------------------------------------------
+  # Tooling
+  # ---------------------------------------------------------------------------
+
+  format:
+    desc: Format Swift source files
+    cmds:
+      - |
+        if command -v swiftformat >/dev/null 2>&1; then
+          swiftformat .
+        else
+          echo "swiftformat is not installed"
+          echo "Install with: brew install swiftformat"
+          exit 1
+        fi
+
+  lint:
+    desc: Run SwiftLint
+    cmds:
+      - |
+        if command -v swiftlint >/dev/null 2>&1; then
+          swiftlint
+        else
+          echo "swiftlint is not installed"
+          echo "Install with: brew install swiftlint"
+          exit 1
+        fi
+
+  check:
+    desc: Run formatting checks, linting, and tests
+    cmds:
+      - task: lint
+      - task: test
+
+  # ---------------------------------------------------------------------------
+  # Convenience
+  # ---------------------------------------------------------------------------
+
+  doctor:
+    desc: Verify the local Swift/Xcode development environment
+    cmds:
+      - |
+        command -v xcodebuild >/dev/null \
+          || { echo "xcodebuild not found"; exit 1; }
+
+        command -v swift >/dev/null \
+          || { echo "swift not found"; exit 1; }
+
+        echo ""
+        xcodebuild -version
+
+        echo ""
+        swift --version
+
+        echo ""
+        echo "Project:"
+        xcodebuild -project "{{.PROJECT}}" -list

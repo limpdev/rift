@@ -1,0 +1,720 @@
+<directory>rift</directory>
+
+<source-tree>
+  rift
+└── rift
+    ├── App
+    │   └── RiftApp.swift
+    ├── Core
+    │   ├── ClickMonitor.swift
+    │   ├── RippleOverlayWindow.swift
+    │   └── RippleWindowsManager.swift
+    ├── Settings
+    │   ├── RippleFXSettings.swift
+    │   └── RippleStyle.swift
+    └── UI
+        ├── ColorWellView.swift
+        ├── MenuBarController.swift
+        └── SettingsView.swift
+
+</source-tree>
+
+<files>
+      <file path="rift/App/RiftApp.swift">
+        ```swift
+import SwiftUI
+
+@main
+struct RiftApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    var body: some Scene {
+        Settings {
+            EmptyView()
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let settings = RippleFXSettings.shared
+    private let menuBarController = MenuBarController.shared
+    private let windowsManager = RippleWindowsManager()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        windowsManager.start()
+        menuBarController.start(settings: settings, windowsManager: windowsManager)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        windowsManager.stop()
+        menuBarController.stop()
+    }
+}
+
+```
+      </file>
+      <file path="rift/Core/ClickMonitor.swift">
+        ```swift
+import AppKit
+
+final class ClickMonitor {
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
+    private let onClick: (NSPoint) -> Void
+
+    init(onClick: @escaping (NSPoint) -> Void) {
+        self.onClick = onClick
+    }
+
+    func start(includeRightClick: Bool = true) {
+        stop()
+
+        var mask: NSEvent.EventTypeMask = [.leftMouseDown]
+        if includeRightClick {
+            mask.insert(.rightMouseDown)
+        }
+
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            self?.onClick(NSEvent.mouseLocation)
+        }
+
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.onClick(NSEvent.mouseLocation)
+            return event
+        }
+    }
+
+    func stop() {
+        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
+        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        globalMonitor = nil
+        localMonitor = nil
+    }
+
+    deinit { stop() }
+}
+
+```
+      </file>
+      <file path="rift/Core/RippleOverlayWindow.swift">
+        ```swift
+// In RippleOverlayWindow.swift
+import AppKit
+import QuartzCore
+
+final class RippleOverlayWindow: NSWindow {
+    private let rippleContainer = RippleContainerView()
+
+    init(screen: NSScreen) {
+        super.init(
+            contentRect: screen.frame,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+
+        level = .screenSaver
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        contentView = rippleContainer
+        setFrame(screen.frame, display: true)
+    }
+
+    func moveToScreen(_ screen: NSScreen) {
+        setFrame(screen.frame, display: true)
+    }
+
+    func spawnRipple(at location: NSPoint, settings: RippleFXSettings) {
+        let local = NSPoint(x: location.x - frame.minX, y: location.y - frame.minY)
+        rippleContainer.spawnRipple(at: local, settings: settings)
+    }
+}
+
+private final class RippleContainerView: NSView {
+    private let maxRipples = 32
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func spawnRipple(at point: NSPoint, settings: RippleFXSettings) {
+        guard let hostLayer = layer else { return }
+
+        if hostLayer.sublayers?.count ?? 0 >= maxRipples {
+            hostLayer.sublayers?.first?.removeFromSuperlayer()
+        }
+
+        let maxRadius = settings.size * 2
+        let diameter = maxRadius * 2
+
+        let rippleLayer = CAShapeLayer()
+        rippleLayer.frame = CGRect(
+            x: point.x - maxRadius,
+            y: point.y - maxRadius,
+            width: diameter,
+            height: diameter
+        )
+        
+        let pathBounds = CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter))
+        rippleLayer.path = CGPath(ellipseIn: pathBounds, transform: nil)
+
+        switch settings.style {
+        case .filled:
+            rippleLayer.fillColor = settings.color.cgColor
+            rippleLayer.strokeColor = nil
+            rippleLayer.lineWidth = 0
+        case .ring:
+            rippleLayer.fillColor = NSColor.clear.cgColor
+            rippleLayer.strokeColor = settings.color.cgColor
+            rippleLayer.lineWidth = settings.thickness
+        }
+
+        rippleLayer.opacity = Float(settings.opacity)
+        hostLayer.addSublayer(rippleLayer)
+
+        let scaleAnimation = CABasicAnimation(keyPath: "transform.scale")
+        scaleAnimation.fromValue = 0.1
+        scaleAnimation.toValue = 1.0
+        scaleAnimation.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+
+        let opacityAnimation = CABasicAnimation(keyPath: "opacity")
+        opacityAnimation.fromValue = Float(settings.opacity)
+        opacityAnimation.toValue = 0.0
+        opacityAnimation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+        let group = CAAnimationGroup()
+        group.animations = [scaleAnimation, opacityAnimation]
+        group.duration = settings.duration
+        group.isRemovedOnCompletion = false
+        group.fillMode = .forwards
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock {
+            rippleLayer.removeFromSuperlayer()
+        }
+        rippleLayer.add(group, forKey: "ripple")
+        CATransaction.commit()
+    }
+}
+
+```
+      </file>
+      <file path="rift/Core/RippleWindowsManager.swift">
+        ```swift
+// In RippleWindowsManager.swift
+import AppKit
+import Combine
+
+final class RippleWindowsManager {
+    private struct ScreenWindow {
+        let screen: NSScreen
+        let window: RippleOverlayWindow
+    }
+
+    private var screenWindows: [ScreenWindow] = []
+    private var clickMonitor: ClickMonitor?
+    private var screenObserver: NSObjectProtocol?
+    private var cancellables = Set<AnyCancellable>()
+    private let settings = RippleFXSettings.shared
+
+    func start() {
+        rebuildWindows()
+
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.rebuildWindows()
+        }
+
+        clickMonitor = ClickMonitor { [weak self] location in
+            self?.handleClick(at: location)
+        }
+
+        settings.$enabled
+            .sink { [weak self] enabled in
+                self?.syncMonitor(enabled: enabled)
+            }
+            .store(in: &cancellables)
+
+        settings.$trackRightClicks
+            .sink { [weak self] _ in
+                guard let self = self, self.settings.enabled else { return }
+                self.syncMonitor(enabled: true)
+            }
+            .store(in: &cancellables)
+
+        syncMonitor(enabled: settings.enabled)
+    }
+
+    func stop() {
+        clickMonitor?.stop()
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        screenWindows.forEach { $0.window.orderOut(nil) }
+        screenWindows.removeAll()
+    }
+
+    private func syncMonitor(enabled: Bool) {
+        if enabled {
+            clickMonitor?.start(includeRightClick: settings.trackRightClicks)
+        } else {
+            clickMonitor?.stop()
+        }
+    }
+
+    private func rebuildWindows() {
+        let currentScreens = NSScreen.screens
+
+        // 1. Remove windows for disconnected displays
+        let currentIDs = Set(currentScreens.map(ObjectIdentifier.init))
+        screenWindows.removeAll { entry in
+            guard !currentIDs.contains(ObjectIdentifier(entry.screen)) else { return false }
+            entry.window.orderOut(nil)
+            return true
+        }
+
+        // 2. Update existing window frames if screen resolutions/positions changed
+        for entry in screenWindows {
+            entry.window.moveToScreen(entry.screen)
+        }
+
+        // 3. Add windows for newly connected displays
+        let existingIDs = Set(screenWindows.map { ObjectIdentifier($0.screen) })
+        for screen in currentScreens where !existingIDs.contains(ObjectIdentifier(screen)) {
+            let window = RippleOverlayWindow(screen: screen)
+            window.orderFrontRegardless()
+            screenWindows.append(ScreenWindow(screen: screen, window: window))
+        }
+    }
+
+    private func handleClick(at location: NSPoint) {
+        guard settings.enabled else { return }
+        guard let entry = screenWindows.first(where: { NSMouseInRect(location, $0.screen.frame, false) }) else { return }
+        entry.window.spawnRipple(at: location, settings: settings)
+    }
+}
+
+```
+      </file>
+      <file path="rift/Settings/RippleFXSettings.swift">
+        ```swift
+import AppKit
+import Combine
+
+/// Persisted configuration for the ripple effect, backed by `UserDefaults`.
+final class RippleFXSettings: ObservableObject {
+    static let shared = RippleFXSettings()
+
+    private enum Keys {
+        static let enabled = "rippleFX.enabled"
+        static let style = "rippleFX.style"
+        static let size = "rippleFX.size"
+        static let duration = "rippleFX.duration"
+        static let opacity = "rippleFX.opacity"
+        static let thickness = "rippleFX.thickness"
+        static let colorData = "rippleFX.colorData"
+        static let trackRightClicks = "rippleFX.trackRightClicks"
+    }
+
+    private enum Defaults {
+        static let enabled = true
+        static let style: RippleStyle = .ring
+        static let size: CGFloat = 16
+        static let duration: TimeInterval = 0.375
+        static let opacity: CGFloat = 0.45
+        static let thickness: CGFloat = 3.0
+        static let color = NSColor.controlAccentColor
+        static let trackRightClicks = true
+    }
+
+    private let store = UserDefaults.standard
+
+    @Published var enabled: Bool {
+        didSet { store.set(enabled, forKey: Keys.enabled) }
+    }
+
+    @Published var style: RippleStyle {
+        didSet { store.set(style.rawValue, forKey: Keys.style) }
+    }
+
+    @Published var size: CGFloat {
+        didSet { store.set(Double(size), forKey: Keys.size) }
+    }
+
+    @Published var duration: TimeInterval {
+        didSet { store.set(duration, forKey: Keys.duration) }
+    }
+
+    @Published var opacity: CGFloat {
+        didSet { store.set(Double(opacity), forKey: Keys.opacity) }
+    }
+
+    @Published var thickness: CGFloat {
+        didSet { store.set(Double(thickness), forKey: Keys.thickness) }
+    }
+
+    @Published var trackRightClicks: Bool {
+        didSet { store.set(trackRightClicks, forKey: Keys.trackRightClicks) }
+    }
+
+    @Published var color: NSColor {
+        didSet { saveColor(color) }
+    }
+
+    private init() {
+        store.register(defaults: [
+            Keys.enabled: Defaults.enabled,
+            Keys.style: Defaults.style.rawValue,
+            Keys.size: Double(Defaults.size),
+            Keys.duration: Defaults.duration,
+            Keys.opacity: Double(Defaults.opacity),
+            Keys.thickness: Double(Defaults.thickness),
+            Keys.trackRightClicks: Defaults.trackRightClicks
+        ])
+
+        self.enabled = store.bool(forKey: Keys.enabled)
+        self.style = RippleStyle(rawValue: store.string(forKey: Keys.style) ?? "") ?? Defaults.style
+        self.size = CGFloat(store.double(forKey: Keys.size))
+        self.duration = store.double(forKey: Keys.duration)
+        self.opacity = CGFloat(store.double(forKey: Keys.opacity))
+        self.thickness = CGFloat(store.double(forKey: Keys.thickness))
+        self.trackRightClicks = store.bool(forKey: Keys.trackRightClicks)
+        self.color = Self.loadColor(from: store) ?? Defaults.color
+    }
+
+    func resetToDefaults() {
+        enabled = Defaults.enabled
+        style = Defaults.style
+        size = Defaults.size
+        duration = Defaults.duration
+        opacity = Defaults.opacity
+        thickness = Defaults.thickness
+        trackRightClicks = Defaults.trackRightClicks
+        color = Defaults.color
+    }
+
+    private func saveColor(_ color: NSColor) {
+        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: color, requiringSecureCoding: true) else { return }
+        store.set(data, forKey: Keys.colorData)
+    }
+
+    private static func loadColor(from store: UserDefaults) -> NSColor? {
+        guard let data = store.data(forKey: Keys.colorData) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)
+    }
+}
+
+```
+      </file>
+      <file path="rift/Settings/RippleStyle.swift">
+        ```swift
+import Foundation
+
+/// Represents the visual rendering style for spawned click ripples.
+enum RippleStyle: String, CaseIterable, Identifiable {
+    case ring = "ring"
+    case filled = "filled"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ring:
+            return "Ring"
+        case .filled:
+            return "Filled"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .ring:
+            return "circle"
+        case .filled:
+            return "circle.fill"
+        }
+    }
+}
+
+```
+      </file>
+      <file path="rift/UI/ColorWellView.swift">
+        ```swift
+import AppKit
+import SwiftUI
+
+/// Wraps AppKit's `NSColorWell` to ensure `NSColorPanel` opens reliably
+/// in menu bar apps and popovers without being dismissed.
+struct ColorWellView: NSViewRepresentable {
+    @Binding var color: NSColor
+
+    func makeNSView(context: Context) -> NSColorWell {
+        let colorWell = NSColorWell()
+        colorWell.color = color
+        colorWell.target = context.coordinator
+        colorWell.action = #selector(Coordinator.colorDidChange(_:))
+
+        if #available(macOS 13.0, *) {
+            colorWell.colorWellStyle = .expanded
+        }
+
+        return colorWell
+    }
+
+    func updateNSView(_ nsView: NSColorWell, context: Context) {
+        if nsView.color != color {
+            nsView.color = color
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject {
+        var parent: ColorWellView
+
+        init(_ parent: ColorWellView) {
+            self.parent = parent
+        }
+
+        @objc func colorDidChange(_ sender: NSColorWell) {
+            // Ensure app is active so the panel stays frontmost
+            NSApp.activate(ignoringOtherApps: true)
+            NSColorPanel.shared.level = .floating
+            parent.color = sender.color
+        }
+    }
+}
+
+```
+      </file>
+      <file path="rift/UI/MenuBarController.swift">
+        ```swift
+import AppKit
+import SwiftUI
+
+final class MenuBarController: NSObject {
+    static let shared = MenuBarController()
+
+    private var statusItem: NSStatusItem?
+    private let popover = NSPopover()
+
+    func start(settings: RippleFXSettings, windowsManager: RippleWindowsManager) {
+        // Prevent duplicate status items
+        guard statusItem == nil else { return }
+
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = item.button {
+            button.image = NSImage(systemSymbolName: "drop.circle", accessibilityDescription: "Rift")
+            button.action = #selector(togglePopover(_:))
+            button.target = self
+        }
+        self.statusItem = item
+
+        // .semitransient keeps the popover open when opening the color panel
+        popover.behavior = .semitransient
+        popover.contentViewController = NSHostingController(
+            rootView: SettingsView(settings: settings, onQuit: {
+                NSApp.terminate(nil)
+            })
+        )
+    }
+
+    func stop() {
+        if let statusItem = statusItem {
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+        }
+    }
+
+    @objc private func togglePopover(_ sender: NSStatusBarButton) {
+        if popover.isShown {
+            popover.performClose(sender)
+        } else {
+            // Activate the app so NSColorPanel and sub-windows receive focus
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.becomeKey()
+        }
+    }
+
+    deinit {
+        stop()
+    }
+}
+
+```
+      </file>
+      <file path="rift/UI/SettingsView.swift">
+        ```swift
+import SwiftUI
+
+struct SettingsView: View {
+    @ObservedObject var settings: RippleFXSettings
+    var onQuit: () -> Void = { NSApp.terminate(nil) }
+
+    // Quick presets for convenience
+    private let presetColors: [NSColor] = [
+        .controlAccentColor,
+        .systemRed,
+        .systemOrange,
+        .systemYellow,
+        .systemGreen,
+        .systemCyan,
+        .systemBlue,
+        .systemPurple,
+        .white,
+        .lightGray
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header & Master Toggle
+            HStack {
+                Label("Rift", systemImage: "drop.fill")
+                    .font(.headline)
+                Spacer()
+                Toggle("", isOn: $settings.enabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                // Style Selector
+                HStack {
+                    Text("Style")
+                    Spacer()
+                    Picker("", selection: $settings.style) {
+                        ForEach(RippleStyle.allCases) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 140)
+                }
+
+                // Color Selection with Presets + Native ColorWell
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Color")
+                        Spacer()
+                        // Native NSColorWell that properly activates NSColorPanel
+                        ColorWellView(color: $settings.color)
+                            .frame(width: 36, height: 24)
+                    }
+
+                    // Quick Palette Swatches
+                    HStack(spacing: 6) {
+                        ForEach(presetColors, id: \.self) { preset in
+                            Circle()
+                                .fill(Color(nsColor: preset))
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.primary.opacity(0.3), lineWidth: 1)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 2)
+                                        .opacity(settings.color == preset ? 1 : 0)
+                                )
+                                .onTapGesture {
+                                    settings.color = preset
+                                }
+                        }
+                    }
+                }
+
+                // Size Slider
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Size")
+                        Spacer()
+                        Text("\(Int(settings.size * 2)) pt")
+                            .foregroundColor(.secondary)
+                            .font(.caption.monospacedDigit())
+                    }
+                    Slider(value: $settings.size, in: 4...48, step: 1)
+                }
+
+                // Duration Slider
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Duration")
+                        Spacer()
+                        Text(String(format: "%.2f s", settings.duration))
+                            .foregroundColor(.secondary)
+                            .font(.caption.monospacedDigit())
+                    }
+                    Slider(value: $settings.duration, in: 0.15...1.0, step: 0.025)
+                }
+
+                // Opacity Slider
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Opacity")
+                        Spacer()
+                        Text("\(Int(settings.opacity * 100))%")
+                            .foregroundColor(.secondary)
+                            .font(.caption.monospacedDigit())
+                    }
+                    Slider(value: $settings.opacity, in: 0.05...1.0, step: 0.05)
+                }
+
+                // Ring Thickness (for ring style)
+                if settings.style == .ring {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Thickness")
+                            Spacer()
+                            Text("\(Int(settings.thickness)) pt")
+                                .foregroundColor(.secondary)
+                                .font(.caption.monospacedDigit())
+                        }
+                        Slider(value: $settings.thickness, in: 1...10, step: 1)
+                    }
+                }
+
+                // Right-Click Toggle
+                Toggle("Track Right Clicks", isOn: $settings.trackRightClicks)
+            }
+            .disabled(!settings.enabled)
+
+            Divider()
+
+            // Footer
+            HStack {
+                Button("Reset Defaults") {
+                    settings.resetToDefaults()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+
+                Spacer()
+
+                Button("Quit Rift", role: .destructive, action: onQuit)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+        .padding(16)
+        .frame(width: 290)
+    }
+}
+
+```
+      </file>
+</files>
