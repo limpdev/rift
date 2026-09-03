@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var settings: RippleFXSettings
+    @ObservedObject private var loginItem = LoginItemController.shared
     var onQuit: () -> Void = { NSApp.terminate(nil) }
 
     // Quick presets for convenience
@@ -83,7 +84,9 @@ struct SettingsView: View {
                     HStack {
                         Text("Size")
                         Spacer()
-                        Text("\(Int(settings.size * 2)) pt")
+                        // Rendered ripple diameter is size * 4
+                        // (maxRadius = size * 2, diameter = maxRadius * 2)
+                        Text("\(Int(settings.size * 4)) pt")
                             .foregroundColor(.secondary)
                             .font(.caption.monospacedDigit())
                     }
@@ -130,6 +133,9 @@ struct SettingsView: View {
 
                 // Right-Click Toggle
                 Toggle("Track Right Clicks", isOn: $settings.trackRightClicks)
+
+                // Launch-at-Login Toggle
+                Toggle("Launch at Login", isOn: launchAtLoginBinding)
             }
             .disabled(!settings.enabled)
 
@@ -152,5 +158,26 @@ struct SettingsView: View {
         }
         .padding(16)
         .frame(width: 290)
+        .onAppear {
+            // Re-sync with System Settings in case the user changed
+            // the registration state outside Rift.
+            loginItem.refreshStatus()
+        }
+    }
+
+    /// Toggle binding that drives `SMAppService` registration.
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { loginItem.isRegistered },
+            set: { newValue in
+                if let failure = loginItem.setLaunchAtLogin(newValue) {
+                    // Registration failed (e.g. the item was turned off in
+                    // System Settings); state has been re-synced so the
+                    // toggle snaps back to the real value.
+                    NSSound.beep()
+                    print("Rift: launch-at-login change failed — \(failure)")
+                }
+            }
+        )
     }
 }
