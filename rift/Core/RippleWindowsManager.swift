@@ -1,93 +1,93 @@
-// In RippleWindowsManager.swift
 import AppKit
 import Combine
 
 final class RippleWindowsManager {
-    private struct ScreenWindow {
-        let screen: NSScreen
-        let window: RippleOverlayWindow
-    }
-
-    private var screenWindows: [ScreenWindow] = []
+    private var windows: [CGDirectDisplayID: RippleOverlayWindow] = [:]
     private var clickMonitor: ClickMonitor?
     private var screenObserver: NSObjectProtocol?
-    private var cancellables = Set<AnyCancellable>()
+    private var monitorSubscription: AnyCancellable?
     private let settings = RippleFXSettings.shared
 
     func start() {
-        rebuildWindows()
+        guard clickMonitor == nil else { return }
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.rebuildWindows()
+            self?.updateWindows()
         }
 
         clickMonitor = ClickMonitor { [weak self] location in
             self?.handleClick(at: location)
         }
 
-        settings.$enabled
-            .sink { [weak self] enabled in
-                self?.syncMonitor(enabled: enabled)
+        // nil means monitoring is paused. Use the published values because
+        // @Published delivers changes before updating the stored properties.
+        monitorSubscription = settings.$enabled
+            .combineLatest(settings.$trackRightClicks)
+            .map { enabled, rightClicks in enabled ? rightClicks : nil }
+            .removeDuplicates()
+            .sink { [weak self] rightClicks in
+                if let rightClicks {
+                    self?.clickMonitor?.start(includeRightClick: rightClicks)
+                } else {
+                    self?.clickMonitor?.stop()
+                    self?.clearWindows()
+                }
             }
-            .store(in: &cancellables)
-
-        settings.$trackRightClicks
-            .sink { [weak self] _ in
-                guard let self = self, self.settings.enabled else { return }
-                self.syncMonitor(enabled: true)
-            }
-            .store(in: &cancellables)
-
-        syncMonitor(enabled: settings.enabled)
     }
 
     func stop() {
+        monitorSubscription = nil
         clickMonitor?.stop()
-        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
-        screenWindows.forEach { $0.window.orderOut(nil) }
-        screenWindows.removeAll()
+        clickMonitor = nil
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+        }
+        screenObserver = nil
+        clearWindows()
     }
 
-    private func syncMonitor(enabled: Bool) {
-        if enabled {
-            clickMonitor?.start(includeRightClick: settings.trackRightClicks)
-        } else {
-            clickMonitor?.stop()
-        }
+    private func clearWindows() {
+        windows.values.forEach { $0.orderOut(nil) }
+        windows.removeAll()
     }
 
-    private func rebuildWindows() {
-        let currentScreens = NSScreen.screens
-
-        // 1. Remove windows for disconnected displays
-        let currentIDs = Set(currentScreens.map(ObjectIdentifier.init))
-        screenWindows.removeAll { entry in
-            guard !currentIDs.contains(ObjectIdentifier(entry.screen)) else { return false }
-            entry.window.orderOut(nil)
-            return true
-        }
-
-        // 2. Update existing window frames if screen resolutions/positions changed
-        for entry in screenWindows {
-            entry.window.moveToScreen(entry.screen)
-        }
-
-        // 3. Add windows for newly connected displays
-        let existingIDs = Set(screenWindows.map { ObjectIdentifier($0.screen) })
-        for screen in currentScreens where !existingIDs.contains(ObjectIdentifier(screen)) {
-            let window = RippleOverlayWindow(screen: screen)
-            window.orderFrontRegardless()
-            screenWindows.append(ScreenWindow(screen: screen, window: window))
+    private func updateWindows() {
+        guard !windows.isEmpty else { return }
+        let screens = NSScreen.screens
+        for (id, window) in windows {
+            if let screen = screens.first(where: { $0.riftDisplayID == id }) {
+                if window.frame != screen.frame {
+                    window.moveToScreen(screen)
+                }
+            } else {
+                window.orderOut(nil)
+                windows.removeValue(forKey: id)
+            }
         }
     }
 
     private func handleClick(at location: NSPoint) {
         guard settings.enabled else { return }
-        guard let entry = screenWindows.first(where: { NSMouseInRect(location, $0.screen.frame, false) }) else { return }
-        entry.window.spawnRipple(at: location, settings: settings)
+        if let window = windows.values.first(where: { NSMouseInRect(location, $0.frame, false) }) {
+            window.spawnRipple(at: location, settings: settings)
+            return
+        }
+
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(location, $0.frame, false) }),
+              let id = screen.riftDisplayID else { return }
+        let window = RippleOverlayWindow(screen: screen)
+        windows[id] = window
+        window.orderFrontRegardless()
+        window.spawnRipple(at: location, settings: settings)
+    }
+}
+
+private extension NSScreen {
+    var riftDisplayID: CGDirectDisplayID? {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 }

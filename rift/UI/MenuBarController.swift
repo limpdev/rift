@@ -7,7 +7,7 @@ final class MenuBarController: NSObject {
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
 
-    func start(settings: RippleFXSettings, windowsManager: RippleWindowsManager) {
+    func start(settings: RippleFXSettings, windowsManager _: RippleWindowsManager) {
         // Prevent duplicate status items
         guard statusItem == nil else { return }
 
@@ -17,7 +17,7 @@ final class MenuBarController: NSObject {
             button.action = #selector(togglePopover(_:))
             button.target = self
         }
-        self.statusItem = item
+        statusItem = item
 
         // .semitransient keeps the popover open when opening the color panel
         popover.behavior = .semitransient

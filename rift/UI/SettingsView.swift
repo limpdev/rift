@@ -5,7 +5,7 @@ struct SettingsView: View {
     @ObservedObject private var loginItem = LoginItemController.shared
     var onQuit: () -> Void = { NSApp.terminate(nil) }
 
-    // Quick presets for convenience
+    /// Quick presets for convenience
     private let presetColors: [NSColor] = [
         .controlAccentColor,
         .systemRed,
@@ -16,7 +16,7 @@ struct SettingsView: View {
         .systemBlue,
         .systemPurple,
         .white,
-        .lightGray
+        .lightGray,
     ]
 
     var body: some View {
@@ -90,7 +90,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .font(.caption.monospacedDigit())
                     }
-                    Slider(value: $settings.size, in: 4...48, step: 1)
+                    Slider(value: $settings.size, in: 4 ... 48, step: 1)
                 }
 
                 // Duration Slider
@@ -102,7 +102,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .font(.caption.monospacedDigit())
                     }
-                    Slider(value: $settings.duration, in: 0.15...1.0, step: 0.025)
+                    Slider(value: $settings.duration, in: 0.15 ... 1.0, step: 0.025)
                 }
 
                 // Opacity Slider
@@ -114,7 +114,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .font(.caption.monospacedDigit())
                     }
-                    Slider(value: $settings.opacity, in: 0.05...1.0, step: 0.05)
+                    Slider(value: $settings.opacity, in: 0.05 ... 1.0, step: 0.05)
                 }
 
                 // Ring Thickness (for ring style)
@@ -127,17 +127,16 @@ struct SettingsView: View {
                                 .foregroundColor(.secondary)
                                 .font(.caption.monospacedDigit())
                         }
-                        Slider(value: $settings.thickness, in: 1...10, step: 1)
+                        Slider(value: $settings.thickness, in: 1 ... 10, step: 1)
                     }
                 }
 
                 // Right-Click Toggle
                 Toggle("Track Right Clicks", isOn: $settings.trackRightClicks)
-
-                // Launch-at-Login Toggle
-                Toggle("Launch at Login", isOn: launchAtLoginBinding)
             }
             .disabled(!settings.enabled)
+
+            Toggle("Launch at Login", isOn: launchAtLoginBinding)
 
             Divider()
 

@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowsManager = RippleWindowsManager()
     private let loginItem = LoginItemController.shared
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.accessory)
         windowsManager.start()
         menuBarController.start(settings: settings, windowsManager: windowsManager)
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.refreshStatus()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    func applicationWillTerminate(_: Notification) {
         windowsManager.stop()
         menuBarController.stop()
     }

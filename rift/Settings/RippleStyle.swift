@@ -2,10 +2,12 @@ import Foundation
 
 /// Represents the visual rendering style for spawned click ripples.
 enum RippleStyle: String, CaseIterable, Identifiable {
-    case ring = "ring"
-    case filled = "filled"
+    case ring
+    case filled
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {

@@ -28,8 +28,12 @@ final class ClickMonitor {
     }
 
     func stop() {
-        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
-        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+        }
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+        }
         globalMonitor = nil
         localMonitor = nil
     }

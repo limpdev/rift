@@ -1,6 +1,6 @@
 import AppKit
-import ServiceManagement
 import Combine
+import ServiceManagement
 
 /// Manages launch-at-login registration via `SMAppService` (the modern,
 /// sandbox-compatible API — no helper process or LaunchAgent required).

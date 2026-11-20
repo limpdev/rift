@@ -69,17 +69,17 @@ final class RippleFXSettings: ObservableObject {
             Keys.duration: Defaults.duration,
             Keys.opacity: Double(Defaults.opacity),
             Keys.thickness: Double(Defaults.thickness),
-            Keys.trackRightClicks: Defaults.trackRightClicks
+            Keys.trackRightClicks: Defaults.trackRightClicks,
         ])
 
-        self.enabled = store.bool(forKey: Keys.enabled)
-        self.style = RippleStyle(rawValue: store.string(forKey: Keys.style) ?? "") ?? Defaults.style
-        self.size = CGFloat(store.double(forKey: Keys.size))
-        self.duration = store.double(forKey: Keys.duration)
-        self.opacity = CGFloat(store.double(forKey: Keys.opacity))
-        self.thickness = CGFloat(store.double(forKey: Keys.thickness))
-        self.trackRightClicks = store.bool(forKey: Keys.trackRightClicks)
-        self.color = Self.loadColor(from: store) ?? Defaults.color
+        enabled = store.bool(forKey: Keys.enabled)
+        style = RippleStyle(rawValue: store.string(forKey: Keys.style) ?? "") ?? Defaults.style
+        size = CGFloat(store.double(forKey: Keys.size))
+        duration = store.double(forKey: Keys.duration)
+        opacity = CGFloat(store.double(forKey: Keys.opacity))
+        thickness = CGFloat(store.double(forKey: Keys.thickness))
+        trackRightClicks = store.bool(forKey: Keys.trackRightClicks)
+        color = Self.loadColor(from: store) ?? Defaults.color
     }
 
     func resetToDefaults() {

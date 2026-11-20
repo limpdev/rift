@@ -19,7 +19,7 @@ struct ColorWellView: NSViewRepresentable {
         return colorWell
     }
 
-    func updateNSView(_ nsView: NSColorWell, context: Context) {
+    func updateNSView(_ nsView: NSColorWell, context _: Context) {
         if nsView.color != color {
             nsView.color = color
         }

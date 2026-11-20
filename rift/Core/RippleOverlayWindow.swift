@@ -43,7 +43,9 @@ private final class RippleContainerView: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
 
     func spawnRipple(at point: NSPoint, settings: RippleFXSettings) {
         guard let hostLayer = layer else { return }
@@ -62,7 +64,7 @@ private final class RippleContainerView: NSView {
             width: diameter,
             height: diameter
         )
-        
+
         let pathBounds = CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter))
         rippleLayer.path = CGPath(ellipseIn: pathBounds, transform: nil)
 
