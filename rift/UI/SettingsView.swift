@@ -23,12 +23,27 @@ struct SettingsView: View {
     VStack(alignment: .leading, spacing: 14) {
       // Header & Master Toggle
       HStack {
-        Label("Rift", systemImage: "drop.fill")
+        Label("Rift", systemImage: "wave.3.down")
           .font(.headline)
         Spacer()
-        Toggle("", isOn: $settings.enabled)
-          .toggleStyle(.switch)
-          .labelsHidden()
+        AnimatedButton(
+          animation: .squish(0.2),
+          duration: 0.2,
+          icon: "wand.and.rays"
+        ) {
+          settings.enabled.toggle()
+        } label: { icon in
+          icon
+            .font(.title3)
+            .foregroundStyle(settings.enabled ? Color.accentColor : .secondary)
+        }
+        .padding(2)
+        .cornerRadius(5)
+        .buttonStyle(.borderless)
+        .help(settings.enabled ? "Disable Rift" : "Enable Rift")
+        // A Button has no on/off state of its own, so tell VoiceOver what the switch used to
+        .accessibilityLabel("Rift")
+        .accessibilityValue(settings.enabled ? "On" : "Off")
       }
 
       Divider()
@@ -179,4 +194,8 @@ struct SettingsView: View {
       }
     )
   }
+}
+
+#Preview {
+  SettingsView(settings: .shared, onQuit: {})
 }

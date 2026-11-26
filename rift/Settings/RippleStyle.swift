@@ -21,9 +21,9 @@ enum RippleStyle: String, CaseIterable, Identifiable {
   var systemImage: String {
     switch self {
     case .ring:
-      return "circle"
+      return "wave.3.down.circle"
     case .filled:
-      return "circle.fill"
+      return "wave.3.down.circle.fill"
     }
   }
 }

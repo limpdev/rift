@@ -17,7 +17,7 @@ final class MenuBarController: NSObject {
     )
     if let button = item.button {
       button.image = NSImage(
-        systemSymbolName: "drop.circle",
+        systemSymbolName: "wave.3.down",
         accessibilityDescription: "Rift"
       )
       button.action = #selector(togglePopover(_:))
