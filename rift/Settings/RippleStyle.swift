@@ -2,28 +2,28 @@ import Foundation
 
 /// Represents the visual rendering style for spawned click ripples.
 enum RippleStyle: String, CaseIterable, Identifiable {
-    case ring
-    case filled
+  case ring
+  case filled
 
-    var id: String {
-        rawValue
-    }
+  var id: String {
+    rawValue
+  }
 
-    var title: String {
-        switch self {
-        case .ring:
-            return "Ring"
-        case .filled:
-            return "Filled"
-        }
+  var title: String {
+    switch self {
+    case .ring:
+      return "Ring"
+    case .filled:
+      return "Filled"
     }
+  }
 
-    var systemImage: String {
-        switch self {
-        case .ring:
-            return "circle"
-        case .filled:
-            return "circle.fill"
-        }
+  var systemImage: String {
+    switch self {
+    case .ring:
+      return "circle"
+    case .filled:
+      return "circle.fill"
     }
+  }
 }
